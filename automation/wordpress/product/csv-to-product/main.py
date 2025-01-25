@@ -1,10 +1,30 @@
-# ATTENTION in the old csv file when inputting the file names the () around the number should be removed,
-# because Wordpress will remove them when images are uploaded
-
 import csv
+import os
 from typing import Union, Optional
 
-# Define the new CSV headers, obtained from WordPress product export
+# Define the attributes with their corresponding column indices from the old CSV
+# ATTRIBUTES = [
+#     ("رنگ", 3),
+#     ("توان مصرفی", 4),
+#     ("نوردهی (لومن)", 6),
+#     ("دمای رنگ (کلوین)", 7),
+#     ("لوکس", 7),
+#     ("CRI", 8),
+#     ("آی پی", 9),
+#     ("گارانتی", 10),
+#     ("محل نصب", 11),
+#     ("برند", None)  # None means no corresponding column
+# ]
+
+ATTRIBUTES = [
+    ("آمپر", 5),
+    ("ولتاژ", 6),
+    ("توان", 7),
+    ("آی پی", 9),
+    ("گارانتی", 10),
+]
+
+# Define the new CSV headers
 HEADERS = [
     "ID", "Type", "SKU", "Name", "Published", "Is featured?", "Visibility in catalog",
     "Short description", "Description", "Date sale price starts", "Date sale price ends",
@@ -14,31 +34,22 @@ HEADERS = [
     "Regular price", "Categories", "Tags", "Shipping class", "Images",
     "Download limit", "Download expiry days", "Parent", "Grouped products",
     "Upsells", "Cross-sells", "External URL", "Button text", "Position",
-    # Attributes 1-10 (name, value, visible, global)
-    *[f"Attribute {i} {field}"
-      for i in range(1, 11)
+    # Dynamically generate attribute headers
+    *[f"Attribute {i+1} {field}"
+      for i in range(len(ATTRIBUTES))
       for field in ["name", "value(s)", "visible", "global"]]
 ]
 
 # Configuration
-URL_PREFIX = "https://shop.perseuslighting.com/wp-content/uploads/2024/11/"
-SUFFIX = "-scaled.jpeg"
-CATEGORIES = "لوازم روشنایی > پروژکتور, لوازم روشنایی"
+URL_PREFIX = "https://shop.perseuslighting.com/wp-content/uploads/2025/01/"
+CATEGORIES = "سوئیچینگ ترانس درایور" 
 TAGS = "پروژکتور"
-
 
 def generate_image_sequence(filename: str, count: Union[int, str]) -> str:
     """
     Generate a sequence of image URLs based on filename and count.
-
-    Args:
-        filename (str): Base filename for the images
-        count (Union[int, str]): Number of images to generate
-
-    Returns:
-        str: Comma-separated string of image URLs
+    Supports both .jpeg and .png extensions.
     """
-    # Validate inputs
     if not filename:
         return ""
 
@@ -49,42 +60,40 @@ def generate_image_sequence(filename: str, count: Union[int, str]) -> str:
     except (ValueError, TypeError):
         return ""
 
-    # Clean filename
+    # Clean filename and determine extension
     filename = filename.replace(" ", "-")
-    base = URL_PREFIX + filename[:-5].strip()
+    ext = os.path.splitext(filename)[1].lower()
+    if ext not in ['.jpeg', '.jpg', '.png']:
+        return "" 
+    main_image_number = int(filename[-(len(ext)+2):-(len(ext)+1)])
+
+    
+    # Remove extension and any trailing numbers
+    base_name = filename[:-(len(ext)+3)]
+    base_url = URL_PREFIX + base_name.strip()
+    suffix = '-scaled' + ext
 
     if count == 1:
-        return base + SUFFIX
+        return base_url + main_image_number + suffix
 
-    # Extract main image number
-    main_image_number = int(filename[-6:-5]) if filename[-6:-5].isdigit() else 0
-    base_url = URL_PREFIX + filename[:-6].strip()
-
-    # Generate URL sequence excluding the main image number
-    urls = [f"{base_url}{i}{SUFFIX}" for i in range(1, count + 1) if i != main_image_number]
-    return f"{base}{SUFFIX}, {', '.join(urls)}"
-
+    # Generate URL sequence
+    urls = [f"{base_url}{i}{suffix}" for i in range(1, count + 1) if i != main_image_number]
+    return f"{base_url}{main_image_number}{suffix}, {', '.join(urls)}"
 
 def create_product_row(old_row: list) -> list:
     """
     Create a new product row from old CSV data.
-
-    Args:
-        old_row (list): Row data from old CSV
-
-    Returns:
-        list: Formatted row for new CSV
     """
-    return [
+    base_row = [
         "",  # ID
         "simple",  # Type
         "",  # SKU
-        old_row[1],  # Name
+        old_row[0],  # Name
         1,  # Published
         0,  # Is featured?
         "visible",  # Visibility
         "",  # Short description
-        old_row[21],  # Description
+        old_row[19],  # Description
         "",  # Sale price start
         "",  # Sale price end
         "taxable",  # Tax status
@@ -94,18 +103,18 @@ def create_product_row(old_row: list) -> list:
         10,  # Low stock amount
         0,  # Backorders
         0,  # Sold individually
-        old_row[19],  # Weight
-        old_row[17],  # Length
+        old_row[18],  # Weight
+        old_row[16],  # Length
         old_row[15],  # Width
-        old_row[20],  # Height
+        old_row[17],  # Height
         1,  # Allow reviews
         "",  # Purchase note
         "",  # Sale price
-        old_row[23],  # Regular price
+        old_row[21],  # Regular price
         CATEGORIES,  # Categories
-        TAGS,  # Tags
+        old_row[4],  # Tags
         "",  # Shipping class
-        generate_image_sequence(old_row[25], old_row[26]),  # Images
+        generate_image_sequence(old_row[22], old_row[23]),  # Images
         "",  # Download limit
         "",  # Download expiry
         "",  # Parent
@@ -115,31 +124,22 @@ def create_product_row(old_row: list) -> list:
         "",  # External URL
         "",  # Button text
         0,  # Position
-        # Attributes
-        "رنگ", old_row[3], 1, 0,
-        "توان مصرفی", old_row[4], 1, 0,
-        "نوردهی (لومن)", old_row[6], 1, 0,
-        "دمای رنگ (کلوین)", old_row[7], 1, 0,
-        "لوکس", old_row[7], 1, 0,
-        "CRI", old_row[8], 1, 0,
-        "آی پی", old_row[9], 1, 0,
-        "گارانتی", old_row[10], 1, 0,
-        "محل نصب", old_row[11], 1, 0,
-        "برند", "", 1, 0
     ]
 
+    # Add attributes dynamically
+    for attr_name, col_index in ATTRIBUTES:
+        value = old_row[col_index] if col_index is not None else ""
+        base_row.extend([attr_name, value, 1, 0])
+
+    return base_row
 
 def transform_csv(input_file: str, output_file: str) -> None:
     """
     Transform old CSV format to new WordPress product format.
-
-    Args:
-        input_file (str): Path to input CSV file
-        output_file (str): Path to output CSV file
     """
     try:
         with open(input_file, 'r', newline='', encoding='utf-8') as old_file, \
-                open(output_file, 'w', newline='', encoding='utf-8') as new_file:
+             open(output_file, 'w', newline='', encoding='utf-8') as new_file:
 
             reader = csv.reader(old_file)
             next(reader)  # Skip header
@@ -154,7 +154,6 @@ def transform_csv(input_file: str, output_file: str) -> None:
 
     except Exception as e:
         print(f"Error during transformation: {str(e)}")
-
 
 if __name__ == "__main__":
     transform_csv('old.csv', 'new.csv')
